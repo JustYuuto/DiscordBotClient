@@ -124,7 +124,9 @@ module.exports = function (app, logger, html, patchList, scriptTarget) {
 				// const guild_id = url_.searchParams.get('guild_id');
 				axios.get(apiBase + api.users(id), { headers })
 					.then(({ data }) => {
-						const hasNitro = data.banner || data.avatar.startsWith('a_') || data.avatar_decoration;
+						let hasNitro;
+						if (data.bot) hasNitro = true;
+						else hasNitro = data.banner || data.avatar.startsWith('a_') || data.avatar_decoration;
 						res.status(200).send({
 							user: data,
 							premium_type: hasNitro ? 2 : null,
