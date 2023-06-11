@@ -146,7 +146,7 @@ module.exports = function (app, logger, html, patchList, scriptTarget) {
 				});
 			}
 		} else if ([
-			api.mentions, api.connections,
+			api.mentions, api.connections, api.gifts, api.codes, api.entitlements,
 			'billing/',
 			'activities/guilds',
 			'interactions',
