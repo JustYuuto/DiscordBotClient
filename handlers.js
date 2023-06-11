@@ -124,6 +124,7 @@ module.exports = function (app, logger, html, patchList, scriptTarget) {
 							user: data,
 							premium_since: hasNitro ? moment().format(dateFormat) : null,
 							premium_type: hasNitro ? 2 : null,
+							connected_accounts: []
 						});
 					})
 					.catch((e) => res.status(404).send({ code: 10013, message: messages.UNKNOWN_USER }));
