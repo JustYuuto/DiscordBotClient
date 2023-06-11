@@ -122,8 +122,9 @@ module.exports = function (app, logger, html, patchList, scriptTarget) {
 						const hasNitro = data.banner || data.avatar.startsWith('a_') || data.avatar_decoration;
 						res.status(200).send({
 							user: data,
-							premium_since: hasNitro ? moment().format(dateFormat) : null,
 							premium_type: hasNitro ? 2 : null,
+							premium_since: hasNitro ? moment().format(dateFormat) : null,
+							premium_guild_since: hasNitro ? moment().format(dateFormat) : null,
 							connected_accounts: []
 						});
 					})
