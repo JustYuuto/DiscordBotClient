@@ -78,12 +78,17 @@ module.exports = function (app, logger, html, patchList, scriptTarget) {
 				return res.send(nitro['590663762298667008']);
 			}
 		}
-		if (url.includes(api.subscriptions)) return res.send([]);
+		if (url.includes(api.subscriptions)) {
+			const subscription = nitro['590663762298667008'][3];
+			return res.send([{
+				canceled_at: null, country_code: null, created_at: moment().format(dateFormat), current_period_start: moment().format(dateFormat),
+				current_period_end: moment().format(dateFormat), items: [{ plan_id: subscription.id, quantity: 1 }], metadata: {},
+				status: 1, type: 1, currency: 'usd', payment_gateway: null, payment_gateway_plan_id: null, payment_gateway_subscription_id: null,
+				payment_source_id: null
+			}]);
+		}
 		if (url.includes(api.logout)) return res.status(204).send();
 		const blacklist = [
-			'entitlements/gifts',
-			'outbound-promotions/codes',
-			'entitlements',
 			'experiments',
 			'science',
 			'affinities',
