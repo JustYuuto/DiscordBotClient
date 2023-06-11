@@ -4,7 +4,7 @@ module.exports = {
   users: (id) => `/users/${id}`,
   profile: (id) => `/users/${id}/profile`,
   channelMessages: (id) => `/channels/${id}/messages`,
-  subscriptions: '/billings/subscriptions',
+  subscriptions: '/billing/subscriptions',
   logout: '/auth/logout',
   download: '/download',
   hypesquad: '/hypesquad/online',
@@ -15,5 +15,8 @@ module.exports = {
   searchThreads: (archived) => `/threads/search?archived=${(typeof archived === 'boolean' ? archived : false).toString()}`,
   ping: '/ping',
   ack: '/ack',
-  ask: '/ask'
+  ask: '/ask',
+  entitlements: '/entitlements',
+  gifts: '/users/@me/entitlements/gifts',
+  codes: '/users/@me/outbound-promotions/codes',
 };
