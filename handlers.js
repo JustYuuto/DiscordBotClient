@@ -7,7 +7,7 @@ const nitro = require('./assets/nitro.js');
 const msg = require('./assets/msg.js');
 const UserData = require('./assets/user.js');
 const Profile = require('./assets/profile.js');
-const userAgent = `DiscordBot (https://github.com/aiko-chan-ai/DiscordBotClient, v${version})`;
+const userAgent = `DiscordBot Fork (https://github.com/JustYuuto/DiscordBotClient, v${version})`;
 const crypto = require('crypto');
 const Store = require('electron-store');
 const moment = require('moment');
@@ -79,7 +79,7 @@ module.exports = function (app, logger, html, patchList, scriptTarget) {
 			}
 		}
 		if (url.includes(api.subscriptions)) {
-			const subscription = nitro['590663762298667008'][3];
+			const subscription = nitro['590663762298667008'].find(s => s.id === '590665532894740483');
 			return res.send([{
 				canceled_at: null, country_code: null, created_at: moment().format(dateFormat), current_period_start: moment().format(dateFormat),
 				current_period_end: moment().format(dateFormat), items: [{ plan_id: subscription.id, quantity: 1 }], metadata: {},
@@ -117,7 +117,7 @@ module.exports = function (app, logger, html, patchList, scriptTarget) {
 				application_commands: [],
 				cursor: null,
 			});
-		} else if (url.includes('/profile')) {
+		} else if (url.match(/\/users\/([0-9]{17,19}|@me|%40me)\/profile/gi)) {
 			if (method === 'GET') {
 				const url_ = new URL(apiBase + url);
 				const id = url_.pathname.match(/\d{17,19}/) ? url_.pathname.match(/\d{17,19}/)[0] : '@me';
@@ -125,14 +125,24 @@ module.exports = function (app, logger, html, patchList, scriptTarget) {
 				axios.get(apiBase + api.users(id), { headers })
 					.then(({ data }) => {
 						let hasNitro;
-						if (data.bot) hasNitro = true;
-						else hasNitro = data.banner || data.avatar.startsWith('a_') || data.avatar_decoration;
+						let userId = Buffer.from(headers.Authorization.replace('Bot ', '').split('.')[0], 'base64').toString();
+						if (id === userId || id === '@me') {
+							data.premium_type = 2;
+							data.flags = 476111; // All flags
+							data.public_flags = 476111; // All flags
+							data.purchased_flags = 3;
+							hasNitro = true;
+						} else hasNitro = data.banner || data.avatar.startsWith('a_') || data.avatar_decoration;
 						res.status(200).send({
 							user: data,
 							premium_type: hasNitro ? 2 : null,
 							premium_since: hasNitro ? moment().format(dateFormat) : null,
 							premium_guild_since: hasNitro ? moment().format(dateFormat) : null,
-							connected_accounts: []
+							connected_accounts: [],
+							user_profile: {
+								accent_color: data.accent_color,
+								banner: data.banner,
+							}
 						});
 					})
 					.catch((e) => res.status(404).send({ code: 10013, message: messages.UNKNOWN_USER }));
@@ -141,17 +151,39 @@ module.exports = function (app, logger, html, patchList, scriptTarget) {
 				const id = url_.pathname.match(/\d{17,19}/) ? url_.pathname.match(/\d{17,19}/)[0] : '@me';
 				getDataFromRequest(req, res, (req) => {
 					axios.patch(apiBase + api.users(id), req.rawBody, { headers })
-						.then(({ data }) => res.status(200).send(data))
+						.then(({ data }) => {
+							let hasNitro;
+							let userId = Buffer.from(headers.Authorization.replace('Bot ', '').split('.')[0], 'base64').toString();
+							if (id === userId || id === '@me') {
+								data.premium_type = 2;
+								data.flags = '476111'; // All flags
+								data.public_flags = '476111'; // All flags
+								data.purchased_flags = 3;
+								hasNitro = true;
+							} else hasNitro = data.banner || data.avatar.startsWith('a_') || data.avatar_decoration;
+							res.status(200).send({
+								user: data,
+								premium_type: hasNitro ? 2 : null,
+								premium_since: hasNitro ? moment().format(dateFormat) : null,
+								premium_guild_since: hasNitro ? moment().format(dateFormat) : null,
+								connected_accounts: [],
+								user_profile: {
+									...req.body,
+									accent_color: data.accent_color,
+									banner: data.banner,
+								}
+							});
+						})
 						.catch(({ code, status }) => res.status(500).send({ code, status }));
 				});
 			}
-		} else if ([
-			api.mentions, api.connections, api.gifts, api.codes, api.entitlements,
+		} else if (url.match(/\/users\/[0-9]{17,19}\/relationships/gi)?.length >= 1 && method === 'GET') return res.status(200).send([]);
+		else if ([
+			api.mentions, api.connections, api.gifts, api.codes, api.entitlements, api.library,
 			'billing/',
 			'activities/guilds',
 			'interactions',
 			'premium/subscription',
-			'relationships',
 			'store/published-listings/skus',
 		].some((path) => url.includes(path))) return res.status(200).send([]);
 		else if (url.includes('onboarding')) res.status(403).send(messages.CAN_PRETTY_MUCH_USE_ENDPOINT);
@@ -211,7 +243,7 @@ module.exports = function (app, logger, html, patchList, scriptTarget) {
 				.then((response) => {
 					let data = response.data;
 					data.premium = true;
-					data.premium_type = 1; // Nitro Classic
+					data.premium_type = 2; // Nitro
 					data.mfa_enabled = 1; // Enable 2FA
 					data.flags = '476111'; // All flags
 					data.public_flags = '476111'; // All flags

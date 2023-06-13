@@ -11,8 +11,12 @@ const NitroData = require('../AppAssets/NitroData');
 const UserPatch = require('../AppAssets/UserPatch');
 const Util = require('../AppAssets/Util');
 const SystemMessages = require('../AppAssets/SystemMessages');
+const messages = require('../AppAssets/Messages');
+const api = require('../AppAssets/DiscordApi');
+const { settingsProto } = require('../AppAssets/DiscordApi');
 
-const userAgent = `DiscordBot (https://github.com/aiko-chan-ai/DiscordBotClient, v${version})`;
+const userAgent = `DiscordBot Fork (https://github.com/JustYuuto/DiscordBotClient, v${version})`;
+const discordApiBase = 'https://discord.com/api/v9';
 
 const text = 'elysia-chan'; // idk :3
 
@@ -31,7 +35,7 @@ const defaultDataEmailSetting = {
 };
 
 function getDataFromRequest(req, res, callback) {
-	var data = '';
+	let data = '';
 	req.on('data', function (chunk) {
 		data += chunk;
 	});
@@ -45,6 +49,13 @@ function getDataFromRequest(req, res, callback) {
 }
 
 const handlerRequest = (url, req, res) => {
+	const headers = {
+		Authorization: req.headers['authorization'],
+		'Content-Type': 'application/json',
+		'User-Agent': userAgent
+	};
+	const method = req.method.toUpperCase();
+
 	// Author:
     if (/users\/\d{17,19}/.exec(url)) {
 		const id = url.match(/users\/(\d{17,19})/)[1];
@@ -55,9 +66,7 @@ const handlerRequest = (url, req, res) => {
 			return res.send(UserData);
 		}
 	}
-	if (url.includes('channels/1000000000000000000/messages')) {
-		return res.send(SystemMessages);
-	}
+	if (url.includes(api.channelMessages('1000000000000000000'))) return res.send(SystemMessages);
     if (url.includes('voice-channel-effects')) {
 		return res.status(200).send();
 	}
@@ -66,17 +75,9 @@ const handlerRequest = (url, req, res) => {
         const id = url.match(/(\d{17,19})\/subscription-plans/)[1];
         return res.send(NitroData[id]);
 	}
-	if (
-		url.includes('billing/subscriptions') ||
-		url.includes('entitlements/gifts')
-	) {
-		return res.send([]);
-	}
-	if (url.includes('auth/logout')) {
-		return res.status(204).send();
-	}
+	if (url.includes(api.subscriptions) || url.includes(api.gifts)) return res.send([]);
+	if (url.includes('auth/logout')) return res.status(204).send();
 	const blacklist = [
-		'outbound-promotions/codes',
 		'entitlements',
 		'experiments',
 		'science',
@@ -94,27 +95,12 @@ const handlerRequest = (url, req, res) => {
 		'connections/eligibility',
 		'activities/shelf',
 	].some((path) => url.includes(path));
-	if (blacklist)
-		return res.status(404).send({
-			message: "Bot can't use this endpoint (blocked)",
-		});
+	if (blacklist) return res.status(404).send({ message: messages.CANNOT_USE_ENDPOINT });
 	if (
-		url.includes('oauth2/') &&
-		!url.includes('assets') &&
-		!url.includes('rpc')
-	) {
-		return res.status(404).send({
-			message: "Bot can't use this endpoint (blocked)",
-		});
-	}
-	if (url.includes('api/download')) {
-		return res.redirect(
-			'https://github.com/aiko-chan-ai/DiscordBotClient/releases',
-		);
-	}
-	if (url.includes('hypesquad/online')) {
-		return res.status(204).send();
-	}
+		url.includes('oauth2/') && !url.includes('assets') && !url.includes('rpc')
+	) return res.status(404).send({ message: messages.CANNOT_USE_ENDPOINT });
+	if (url.includes(api.download)) return res.redirect('https://github.com/aiko-chan-ai/DiscordBotClient/releases');
+	if (url.includes(api.hypesquad)) return res.status(204).send();
 	if (url.includes('application-commands/search')) {
 		return res.status(200).send({
 			applications: [],
@@ -122,69 +108,51 @@ const handlerRequest = (url, req, res) => {
 			cursor: null,
 		});
 	}
-    if (url.includes('/profile')) {
-		const BotToken = req.headers.authorization;
+    if (url.match(/\/users\/([0-9]{17,19}|%40me)\/profile/gi)) {
 		const url_ = new URL(`https://discord.com${url}`);
-		const id = url_.pathname.match(/\d{17,19}/)[0];
-		return axios
-			.get(`https://discord.com/api/v9/users/${id}`, {
-				headers: {
-					Authorization: BotToken,
-					'Content-Type': 'application/json',
-					'User-Agent': userAgent,
-				},
-			})
-			.then(({ data }) => {
-				return res.status(200).send(Util.ProfilePatch(data));
-			})
-			.catch(() => {
-				return res.status(200).send(Util.ProfilePatch({ id }));
+		const id =  url_.pathname.match(/\d{17,19}/) ? url_.pathname.match(/\d{17,19}/)[0] : '@me';
+		if (method === 'GET') {
+			return axios.get(discordApiBase + api.users(id), { headers })
+				.then(({ data }) => res.status(200).send(Util.ProfilePatch(data)))
+				.catch(() => res.status(200).send(Util.ProfilePatch({ id })));
+		} else if (method === 'PATCH') {
+			return getDataFromRequest(req, res, ({ rawBody }) => {
+				return axios.patch(discordApiBase + api.users(id), rawBody, { headers })
+					.then(({ data }) => res.status(200).send(Util.ProfilePatch(data)))
+					.catch(() => res.status(200).send(Util.ProfilePatch({ id })));
 			});
-	}
-    if (
-		[
-			'users/@me/mentions',
-			'billing/',
-			'activities/guilds',
-			'interactions',
-			'premium/subscription',
-			'relationships',
-			'store/published-listings/skus',
-		].some((path) => url.includes(path))
-	) {
-		return res.status(200).send([]);
-	}
-    if (url.includes('onboarding')) {
-		return res.status(404).send(
-			'Bot can use this endpoint but it will crash the client :<',
-		);
-	}
-    if (url.includes('/onboarding-responses')) {
-		if (req.method.toUpperCase() == 'POST') {
-			const callback = (req, res) => {
-				const guild_id = /\d{17,19}/.exec(url)[0];
-				const BotToken = req.headers.authorization;
-				const uid = Buffer.from(
-					BotToken.replace('Bot ', '').split('.')[0],
-					'base64',
-				).toString();
-				let data = {
-					...req.body,
-					guild_id,
-					user_id: uid,
-				};
-				delete data.update_roles_and_channels;
-				res.status(200).send(data);
-			};
-			return getDataFromRequest(req, res, callback);
 		}
 	}
-    if (url.includes('messages/search')) {
+    if ([
+		api.mentions,
+		'billing/',
+		'activities/guilds',
+		'interactions',
+		'premium/subscription',
+		'relationships',
+		'store/published-listings/skus',
+		'outbound-promotions/codes'
+	].some((path) => url.includes(path))) return res.status(200).send([]);
+    if (url.includes('onboarding')) {
+		return res.status(400).send(messages.CAN_PRETTY_MUCH_USE_ENDPOINT);
+	}
+    if (url.includes('/onboarding-responses') && method === 'POST') {
+		const callback = (req, res) => {
+			const guild_id = /\d{17,19}/.exec(url)[0];
+			const uid = Buffer.from(headers.Authorization.replace('Bot ', '').split('.')[0], 'base64').toString();
+			let data = {
+				...req.body,
+				guild_id,
+				user_id: uid,
+			};
+			delete data.update_roles_and_channels;
+			res.status(200).send(data);
+		};
+		return getDataFromRequest(req, res, callback);
+	}
+    if (url.includes(api.searchMessages)) {
 		const salt = Math.random().toString();
-		const hash = crypto
-			.createHash('md5')
-			.update(salt + text)
-			.digest('hex');
+		const hash = crypto.createHash('md5').update(salt + text).digest('hex');
 		return res.status(200).send({
 			analytics_id: hash,
 			doing_deep_historical_index: false,
@@ -192,31 +160,17 @@ const handlerRequest = (url, req, res) => {
 			messages: [],
 		});
 	}
-    if (url.includes('settings-proto/1')) {
+    if (url.includes(api.settingsProto(1))) {
 		// parse userid from header
-		const BotToken = req.headers.authorization;
-		const uid = Buffer.from(
-			BotToken.replace('Bot ', '').split('.')[0],
-			'base64',
-		).toString();
-		if (cacheSettings.get(uid) == undefined) {
-			cacheSettings.set(uid, settingDefault);
-		}
-		if (req.method.toUpperCase() == 'GET')
+		const uid = Buffer.from(headers.Authorization.replace('Bot ', '').split('.')[0], 'base64').toString();
+		if (typeof cacheSettings.get(uid) === 'undefined') cacheSettings.set(uid, settingDefault);
+		if (method === 'GET')
 			return res.send({
-				settings: PreloadedUserSettings.toBase64(
-					cacheSettings.get(uid).data1,
-				),
+				settings: PreloadedUserSettings.toBase64(cacheSettings.get(uid).data1),
 			});
 		const callback = (req, res) => {
-			const BotToken = req.headers.authorization;
-			const uid = Buffer.from(
-				BotToken.replace('Bot ', '').split('.')[0],
-				'base64',
-			).toString();
-			if (cacheSettings.get(uid) == undefined) {
-				cacheSettings.set(uid, settingDefault);
-			}
+			const uid = Buffer.from(headers.Authorization.replace('Bot ', '').split('.')[0], 'base64').toString();
+			if (typeof cacheSettings.get(uid) === 'undefined') cacheSettings.set(uid, settingDefault);
 			const settings = cacheSettings.get(uid);
 			const decoded = PreloadedUserSettings.fromBase64(req.body.settings);
 			settings.data1 = Object.assign(settings.data1, decoded);
@@ -227,27 +181,12 @@ const handlerRequest = (url, req, res) => {
 		};
 		return getDataFromRequest(req, res, callback);
 	}
-    if (url.includes('settings-proto/2')) {
-		return res.send({
-			settings: '',
-		});
-	}
-    if (url.includes('users/@me/email-settings')) {
-		return res.send(defaultDataEmailSetting);
-	}
-    if (url.includes('/threads/search?archived=true')) {
+    if (url.includes(api.settingsProto(2))) return res.send({ settings: '' });
+    if (url.includes(api.emailSettings)) return res.send(defaultDataEmailSetting);
+    if (url.includes(api.searchThreads(true))) {
         // TODO: fix this
 		const cid = /\d{17,19}/.exec(url)[0];
-		return axios
-			.get(
-				`https://discord.com/api/v9/channels/${cid}/threads/archived/public`,
-				{
-					headers: {
-						authorization: req.headers.authorization,
-						'user-agent': userAgent,
-					},
-				},
-			)
+		return axios.get(discordApiBase + `/channels/${cid}/threads/archived/public`, { headers })
 			.then((response) => {
 				res.status(200).send({
 					...response.data,
@@ -263,76 +202,72 @@ const handlerRequest = (url, req, res) => {
 					},
 				});
 			});
-	} 
-    if (
-		url.includes('api/v9/users/@me') &&
-		req.method.toUpperCase() == 'GET'
-	) {
-		return axios
-			.get(`https://discord.com/api/v9/users/@me`, {
-				headers: {
-					authorization: req.headers.authorization,
-					'user-agent': userAgent,
-				},
-			})
-			.then((response) => {
-				let data = response.data;
-				data.premium = true;
-				data.premium_type = 1; // Nitro Classic
-				data.mfa_enabled = 1; // Enable 2FA
-				data.flags = '476111'; // All flags
-				data.public_flags = '476111'; // All flags
-				data.phone = '+1234567890'; // Fake phone
-				data.verified = true; // verify
-				data.nsfw_allowed = true; // Allow nsfw (ios)
-				data.email = 'DiscordBotClient@aiko.com'; // fake email, not a real one
-				data.purchased_flags = 3;
-				res.status(200).send(data);
-			})
-			.catch((err) => {
-				res.status(404).send();
+	}
+    if (url.endsWith(api.me)) {
+		if (method === 'GET') {
+			return axios.get(discordApiBase + api.me, { headers })
+				.then((response) => {
+					let data = response.data;
+					data.premium = true;
+					data.premium_type = 2; // Nitro Boost
+					data.mfa_enabled = 1; // Enable 2FA
+					data.flags = '476111'; // All flags
+					data.public_flags = '476111'; // All flags
+					data.phone = '+1234567890'; // Fake phone
+					data.verified = true; // verify
+					data.nsfw_allowed = true; // Allow nsfw (ios)
+					data.email = 'DiscordBotClient@aiko.com'; // fake email, not a real one
+					data.purchased_flags = 3;
+					res.status(200).send(data);
+				})
+				.catch((err) => res.status(404).send());
+		} else if (method === 'PATCH') {
+			return getDataFromRequest(req, res, ({ rawBody }) => {
+				return axios.patch(discordApiBase + api.me, rawBody, { headers })
+					.then((response) => {
+						let data = response.data;
+						data.premium = true;
+						data.premium_type = 2; // Nitro Boost
+						data.mfa_enabled = 1; // Enable 2FA
+						data.flags = '476111'; // All flags
+						data.public_flags = '476111'; // All flags
+						data.phone = '+1234567890'; // Fake phone
+						data.verified = true; // verify
+						data.nsfw_allowed = true; // Allow nsfw (ios)
+						data.email = 'DiscordBotClient@aiko.com'; // fake email, not a real one
+						data.purchased_flags = 3;
+						res.status(200).send(data);
+					})
+					.catch((err) => res.status(404).send());
 			});
+		}
 	}
-    if ( url.includes('/ack')) {
-		return res.status(200).send({ token: null });
-	}
-    if (url.includes('billing/country-code')) {
-		return res.status(200).send({
-			country_code: 'VN',
-		});
-	}
-    if (url.includes('logout')) {
-		return res.status(200).send();
-	}
+    if (url.endsWith(api.ack)) return res.status(200).send({ token: null });
+    if (url.includes('billing/country-code')) return res.status(200).send({ country_code: 'VN' });
+    if (url.includes('logout')) return res.status(200).send();
     return req.pipe(request('https://discord.com' + url)).pipe(res);
 };
 
 module.exports = function (app, logger, html, patchList, scriptTarget) {
-	app.get('/ping', function (req, res) {
+	app.get(api.ping, function (req, res) {
 		res.status(200).send('pong');
 	});
 
 	app.all('/d/*', function (req, res) {
 		const str = req.originalUrl;
 		const trs = str.slice('\x32');
-		let headers = {
-			'user-agent': userAgent,
-		};
-		if (req.headers.authorization) {
-			headers.authorization = req.headers.authorization;
-		}
+		let headers = { 'User-Agent': userAgent };
+		if (req.headers.authorization) headers.authorization = req.headers.authorization;
 		Object.keys(req.headers).forEach((key) => {
-			if (
-				[
-					'cookie',
-					'x-',
-					'sec-',
-					'referer',
-					'origin',
-					'authorization',
-					'user-agent',
-				].some((prefix) => key.toLowerCase().startsWith(prefix))
-			) {
+			if ([
+				'cookie',
+				'x-',
+				'sec-',
+				'referer',
+				'origin',
+				'authorization',
+				'user-agent',
+			].some((prefix) => key.toLowerCase().startsWith(prefix))) {
 				return;
 			} else {
 				headers[key] = req.headers[key];
@@ -363,7 +298,7 @@ module.exports = function (app, logger, html, patchList, scriptTarget) {
 		}
 		return req.pipe(request('https://discord.com' + trs)).pipe(res);
 	});
-	// Some request ...
+
 	app.all('/oauth2/authorize', (req, res) => {
 		res.redirect('/app');
 	});

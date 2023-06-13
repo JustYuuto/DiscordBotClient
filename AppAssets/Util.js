@@ -3,13 +3,11 @@ const Constants = require('./Constants');
 
 module.exports = class Util {
     static ProfilePatch(userData) {
+		console.log(userData);
 		const flags = new UserFlags(userData.public_flags);
 		const badges = flags.toArray().map((n) => Constants.Badges[n]).filter(o => o);
 		if (userData.bot) badges.push(Constants.Badges.BOT_SLASH, Constants.Badges.BOT_AUTOMOD);
-		if (
-			userData.avatar?.includes('a_') ||
-			userData.banner
-		) {
+		if (userData.avatar?.includes('a_') || userData.banner) {
 			badges.push(Constants.Badges.NITRO, Constants.Badges.GUILD_BOOSTER);
 		}
 		if (userData.discriminator === '0') badges.push(Constants.Badges.LEGACY_USERNAME);
